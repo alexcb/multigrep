@@ -2,11 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"golang.org/x/tools/godoc/util"
 
 	goflags "github.com/jessevdk/go-flags"
 )
@@ -61,10 +64,20 @@ func main() {
 			if err != nil {
 				return err
 			}
-			if !info.IsDir() {
-				return grepFile(path, patterns)
+			if info.IsDir() {
+				if strings.HasPrefix(path, ".") && path != "." {
+					return filepath.SkipDir
+				}
+				return nil
 			}
-			return nil
+			if (info.Mode() & fs.ModeSymlink) != 0 {
+				fmt.Fprintf(os.Stderr, "Warn: skipping symlink %s\n", path)
+				return nil
+			}
+			if strings.HasPrefix(path, ".") {
+				return nil
+			}
+			return grepFile(path, patterns)
 		})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to walk %s: %s\n", dirPath, err.Error())
@@ -77,6 +90,10 @@ func grepFile(path string, regexps []*regexp.Regexp) error {
 	if err != nil {
 		return err
 	}
+	if !util.IsText(data) {
+		return nil
+	}
+
 	lines := strings.Split(string(data), "\n")
 	numLines := len(lines)
 	numRegexps := len(regexps)
