@@ -15,8 +15,9 @@ import (
 )
 
 type Flags struct {
-	Context bool `short:"c" long:"help" description:"context (window) size"`
-	Help    bool `short:"h" long:"help" description:"display this help"`
+	Context         bool `short:"c" description:"context (window) size"`
+	CaseInsensitive bool `short:"i" description:"Case insensitive matching"`
+	Help            bool `short:"h" long:"help" description:"display this help"`
 }
 
 func main() {
@@ -49,6 +50,9 @@ func main() {
 	for _, arg := range args {
 		if arg == "-v" {
 			panic("-v not yet supported")
+		}
+		if flags.CaseInsensitive {
+			arg = "(?i)" + arg
 		}
 		r, err := regexp.Compile(arg)
 		if err != nil {
