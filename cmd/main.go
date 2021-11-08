@@ -53,6 +53,7 @@ func main() {
 	negate := false
 	insensitive := false
 	ignoreDashes := false
+	wordBoundary := false
 	for _, arg := range args {
 		if len(arg) == 0 {
 			die("empty args are not supported\n")
@@ -70,6 +71,11 @@ func main() {
 						die("two -v's in a row not supported\n")
 					}
 					negate = true
+				case 'w':
+					if wordBoundary {
+						die("two -w's in a row not supported\n")
+					}
+					wordBoundary = true
 				case 'e':
 					ignoreDashes = true
 				default:
@@ -77,6 +83,9 @@ func main() {
 				}
 			}
 			continue
+		}
+		if wordBoundary {
+			arg = "\\b" + arg + "\\b"
 		}
 		if flags.CaseInsensitive || insensitive {
 			arg = "(?i)" + arg
@@ -91,6 +100,7 @@ func main() {
 		})
 		negate = false
 		insensitive = false
+		wordBoundary = false
 		ignoreDashes = false
 	}
 
