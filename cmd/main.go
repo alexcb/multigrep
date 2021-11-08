@@ -20,46 +20,83 @@ type Flags struct {
 	Help            bool `short:"h" long:"help" description:"display this help"`
 }
 
+type pattern struct {
+	re     *regexp.Regexp
+	negate bool
+}
+
+func die(msg string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, msg, args...)
+	os.Exit(1)
+}
+
 func main() {
 	progName := "multigrep"
 	if len(os.Args) > 0 {
 		progName = os.Args[0]
 	}
-	usage := fmt.Sprintf("%s [options] <pattern> [[-v] <pattern> [...]]", progName)
+	usage := fmt.Sprintf("%s [options] <pattern> [[-i] [-v] <pattern> [...]]", progName)
 
 	flags := Flags{}
 	p := goflags.NewNamedParser("", goflags.PrintErrors|goflags.PassDoubleDash|goflags.PassAfterNonOption)
 	p.AddGroup(usage, "", &flags)
 	args, err := p.ParseArgs(os.Args[1:])
 	if err != nil {
-		fmt.Fprintf(os.Stdout, "failed to parse flags: %s\n", err)
-		os.Exit(1)
+		die("failed to parse flags: %s\n", err)
 	}
 	if flags.Help {
 		p.WriteHelp(os.Stdout)
 		os.Exit(0)
 	}
 
-	numPatterns := len(args)
-	if numPatterns < 1 {
-		fmt.Fprintf(os.Stderr, "%s\n", usage)
-		os.Exit(1)
-	}
-
-	var patterns []*regexp.Regexp
+	var patterns []*pattern
+	negate := false
+	insensitive := false
+	ignoreDashes := false
 	for _, arg := range args {
-		if arg == "-v" {
-			panic("-v not yet supported")
+		if len(arg) == 0 {
+			die("empty args are not supported\n")
 		}
-		if flags.CaseInsensitive {
+		if arg[0] == '-' && !ignoreDashes {
+			for _, short := range arg[1:] {
+				switch short {
+				case 'i':
+					if insensitive {
+						die("two -i's in a row not supported\n")
+					}
+					insensitive = true
+				case 'v':
+					if negate {
+						die("two -v's in a row not supported\n")
+					}
+					negate = true
+				case 'e':
+					ignoreDashes = true
+				default:
+					die("Error: -%c not recognized\n", short)
+				}
+			}
+			continue
+		}
+		if flags.CaseInsensitive || insensitive {
 			arg = "(?i)" + arg
 		}
 		r, err := regexp.Compile(arg)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "%s is not a valid regexp: %s\n", arg, err.Error())
-			os.Exit(1)
+			die("%s is not a valid regexp: %s\n", arg, err.Error())
 		}
-		patterns = append(patterns, r)
+		patterns = append(patterns, &pattern{
+			re:     r,
+			negate: negate,
+		})
+		negate = false
+		insensitive = false
+		ignoreDashes = false
+	}
+
+	numPatterns := len(patterns)
+	if numPatterns < 1 {
+		die("%s\n", usage)
 	}
 
 	dirPath := "."
@@ -84,12 +121,11 @@ func main() {
 			return grepFile(path, patterns)
 		})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed to walk %s: %s\n", dirPath, err.Error())
-		os.Exit(1)
+		die("failed to walk %s: %s\n", dirPath, err.Error())
 	}
 }
 
-func grepFile(path string, regexps []*regexp.Regexp) error {
+func grepFile(path string, patterns []*pattern) error {
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return err
@@ -100,14 +136,13 @@ func grepFile(path string, regexps []*regexp.Regexp) error {
 
 	lines := strings.Split(string(data), "\n")
 	numLines := len(lines)
-	numRegexps := len(regexps)
+	numRegexps := len(patterns)
 	matches := make([]bool, numLines*numRegexps)
 	for i, line := range lines {
-		for j, reg := range regexps {
+		for j, pat := range patterns {
 			k := i*numRegexps + j
-			if reg.Match([]byte(line)) {
-				matches[k] = true
-			}
+			match := pat.re.Match([]byte(line))
+			matches[k] = match != pat.negate // xor
 		}
 	}
 
