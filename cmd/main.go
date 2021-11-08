@@ -17,6 +17,7 @@ import (
 type Flags struct {
 	Context         bool `short:"c" description:"context (window) size"`
 	CaseInsensitive bool `short:"i" description:"Case insensitive matching"`
+	WordBoundary    bool `short:"w" description:"word boundary matching"`
 	Help            bool `short:"h" long:"help" description:"display this help"`
 }
 
@@ -84,7 +85,7 @@ func main() {
 			}
 			continue
 		}
-		if wordBoundary {
+		if flags.WordBoundary || wordBoundary {
 			arg = "\\b" + arg + "\\b"
 		}
 		if flags.CaseInsensitive || insensitive {
